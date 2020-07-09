@@ -1,0 +1,4 @@
+twitter:
+  bearer-token: ${BEARER_TOKEN}
+server:
+  port: ${PORT:8080}
