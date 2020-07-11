@@ -1,1 +1,1 @@
-rootProject.name = "rafael-twitter-stream-controller"
+include("rafael-twitter-stream-controller-app")
