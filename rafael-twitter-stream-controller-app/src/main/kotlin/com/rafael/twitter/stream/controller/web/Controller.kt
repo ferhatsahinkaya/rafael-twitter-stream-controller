@@ -16,12 +16,16 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/rules")
-class Controller(@Value("\${twitter.bearer-token}") val bearerToken: String) {
+class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
+                 @Value("\${twitter.rules-path}") val rulesPath: String,
+                 @Value("\${twitter.oauth-path}") val oauthPath: String,
+                 @Value("\${twitter.bearer-token}") val bearerToken: String) {
     private val objectMapper = json().build<ObjectMapper>()
+    private val rulesResourcePath = "$baseUrl$rulesPath"
 
     @PostMapping("/add", consumes = [MediaType.APPLICATION_JSON_VALUE])
     fun <T : RuleRequest> addRule(@RequestBody addRequest: T) {
-        "https://api.twitter.com/labs/1/tweets/stream/filter/rules"
+        rulesResourcePath
                 .httpPost()
                 .header("Content-Type", "application/json")
                 .header("Authorization", token().let { "${it.type} ${it.value}" })
@@ -39,7 +43,7 @@ class Controller(@Value("\${twitter.bearer-token}") val bearerToken: String) {
                 .map { it.id }
                 .takeIf { it.isNotEmpty() }
                 ?.run {
-                    "https://api.twitter.com/labs/1/tweets/stream/filter/rules"
+                    rulesResourcePath
                             .httpPost()
                             .header("Content-Type", "application/json")
                             .header("Authorization", token().let { "${it.type} ${it.value}" })
@@ -52,7 +56,7 @@ class Controller(@Value("\${twitter.bearer-token}") val bearerToken: String) {
 
     @GetMapping
     fun getRules() =
-            "https://api.twitter.com/labs/1/tweets/stream/filter/rules"
+            rulesResourcePath
                     .httpGet()
                     .header("Content-Type", "application/json")
                     .header("Authorization", token().let { "${it.type} ${it.value}" })
@@ -61,7 +65,7 @@ class Controller(@Value("\${twitter.bearer-token}") val bearerToken: String) {
                     .also { println("Get Rules Result: $it") }
 
     private fun token() =
-            "https://api.twitter.com/oauth2/token?grant_type=client_credentials"
+            "$baseUrl$oauthPath"
                     .httpPost()
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Basic $bearerToken")
