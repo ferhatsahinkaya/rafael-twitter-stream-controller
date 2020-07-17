@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/rules")
-class RuleController(@Value("\${twitter.bearer-token}") val bearerToken: String) {
+class Controller(@Value("\${twitter.bearer-token}") val bearerToken: String) {
     private val objectMapper = json().build<ObjectMapper>()
 
     @PostMapping("/add", consumes = [MediaType.APPLICATION_JSON_VALUE])
