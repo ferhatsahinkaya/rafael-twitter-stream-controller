@@ -58,7 +58,7 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
     fun getRules() =
             rulesResourcePath
                     .httpGet()
-                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
                     .header("Authorization", token().let { "${it.type} ${it.value}" })
                     .responseObject<TwitterGetRuleResponse>()
                     .result()
@@ -67,11 +67,16 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
     private fun token() =
             "$baseUrl$oauthPath"
                     .httpPost()
-                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
                     .header("Authorization", "Basic $bearerToken")
-                    .responseObject<TwitterToken>()
+                    .responseObject<TwitterGetTokenResponse>()
                     .result()
                     .also { println("Retrieved Token: $it") }
+
+    @ResponseStatus
+    @ExceptionHandler(Exception::class)
+    fun exceptionHandler() {
+    }
 
     private fun <T> ResponseResultOf<T>.result(): T {
         val (_, _, result) = this
@@ -81,8 +86,8 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
         }
     }
 
-    data class TwitterToken(@JsonProperty("token_type") val type: String,
-                            @JsonProperty("access_token") val value: String)
+    data class TwitterGetTokenResponse(@JsonProperty("token_type") val type: String,
+                                       @JsonProperty("access_token") val value: String)
 
     data class TwitterGetRuleResponse(@JsonProperty("data") val data: List<TwitterGetRuleData> = emptyList())
 

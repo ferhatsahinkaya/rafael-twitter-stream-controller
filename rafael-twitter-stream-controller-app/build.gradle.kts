@@ -23,10 +23,15 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test") {
         exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
     }
+    testImplementation("com.github.tomakehurst:wiremock:2.27.1")
 }
 
 tasks {
     bootJar {
         mainClassName = "com.rafael.twitter.stream.controller.application.Application"
+    }
+
+    test {
+        useJUnitPlatform()
     }
 }
