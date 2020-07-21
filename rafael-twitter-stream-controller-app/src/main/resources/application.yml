@@ -5,3 +5,6 @@ twitter:
   bearer-token: ${BEARER_TOKEN}
 server:
   port: ${PORT:8080}
+spring:
+  jackson:
+    default-property-inclusion: non_null

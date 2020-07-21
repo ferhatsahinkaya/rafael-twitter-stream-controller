@@ -1,5 +1,6 @@
 package com.rafael.twitter.stream.controller.web
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import com.fasterxml.jackson.annotation.JsonTypeName
@@ -20,39 +21,30 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
                  @Value("\${twitter.rules-path}") val rulesPath: String,
                  @Value("\${twitter.oauth-path}") val oauthPath: String,
                  @Value("\${twitter.bearer-token}") val bearerToken: String) {
-    private val objectMapper = json().build<ObjectMapper>()
+    private val objectMapper = json().build<ObjectMapper>().setSerializationInclusion(NON_NULL)
     private val rulesResourcePath = "$baseUrl$rulesPath"
 
     @PostMapping("/add", consumes = [MediaType.APPLICATION_JSON_VALUE])
-    fun <T : RuleRequest> addRule(@RequestBody addRequest: T) {
-        rulesResourcePath
-                .httpPost()
-                .header("Content-Type", "application/json")
-                .header("Authorization", token().let { "${it.type} ${it.value}" })
-                .body(objectMapper.writeValueAsString(TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData(addRequest.value())))))
-                .responseObject<TwitterAddRuleResponse>()
-                .result()
-                .also { println("Add Rule Result: $it") }
-    }
+    fun <T : AddRuleRequestData> addRule(@RequestBody addRequest: AddRuleRequest<T>) =
+            rulesResourcePath
+                    .httpPost()
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", token().let { "${it.type} ${it.value}" })
+                    .body(objectMapper.writeValueAsString(TwitterAddRuleRequest(addRequest.data.map { TwitterAddRuleRequestData(it.value()) })))
+                    .responseObject<TwitterAddRuleResponse>(json().build<ObjectMapper>().setSerializationInclusion(NON_NULL))
+                    .result()
+                    .also { println("Add Rule Result: $it") }
 
     @PostMapping("/delete")
-    fun <T : RuleRequest> deleteRule(@RequestBody deleteRequest: T) {
-        getRules()
-                .data
-                .filter { it.value == deleteRequest.value() }
-                .map { it.id }
-                .takeIf { it.isNotEmpty() }
-                ?.run {
-                    rulesResourcePath
-                            .httpPost()
-                            .header("Content-Type", "application/json")
-                            .header("Authorization", token().let { "${it.type} ${it.value}" })
-                            .body(objectMapper.writeValueAsString(TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(this))))
-                            .responseObject<TwitterDeleteRuleResponse>()
-                            .result()
-                            .also { println("Delete Rule Result: $it") }
-                }
-    }
+    fun deleteRule(@RequestBody deleteRequest: DeleteRuleRequest) =
+            rulesResourcePath
+                    .httpPost()
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", token().let { "${it.type} ${it.value}" })
+                    .body(objectMapper.writeValueAsString(TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(deleteRequest.data.map { it.id }))))
+                    .responseObject<TwitterDeleteRuleResponse>()
+                    .result()
+                    .also { println("Delete Rule Result: $it") }
 
     @GetMapping
     fun getRules() =
@@ -94,7 +86,7 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
     data class TwitterGetRuleData(@JsonProperty("id") val id: String,
                                   @JsonProperty("value") val value: String)
 
-    data class TwitterAddRuleRequest(val add: List<TwitterAddRuleRequestData>)
+    data class TwitterAddRuleRequest(@JsonProperty("add") val data: List<TwitterAddRuleRequestData>)
 
     data class TwitterAddRuleRequestData(val value: String)
 
@@ -102,13 +94,13 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
                                       @JsonProperty("errors") val errors: List<TwitterAddRuleError> = emptyList())
 
     data class TwitterAddRuleData(@JsonProperty("value") val value: String,
-                                  @JsonProperty("tag") val tag: String?,
-                                  @JsonProperty("id") val id: String)
+                                  @JsonProperty("id") val id: String,
+                                  @JsonProperty("tag") val tag: String?)
 
     data class TwitterAddRuleError(@JsonProperty("title") val title: String,
                                    @JsonProperty("type") val type: String)
 
-    data class TwitterDeleteRuleRequest(val delete: TwitterDeleteRuleRequestData)
+    data class TwitterDeleteRuleRequest(@JsonProperty("delete") val data: TwitterDeleteRuleRequestData)
 
     data class TwitterDeleteRuleRequestData(val ids: List<String>)
 
@@ -118,12 +110,18 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
                                       @JsonProperty("type") val type: String)
 }
 
+data class AddRuleRequest<T : AddRuleRequestData>(val data: List<T>)
+
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME)
-sealed class RuleRequest {
+sealed class AddRuleRequestData {
     abstract fun value(): String
 }
 
 @JsonTypeName("mention")
-data class MentionRequest(val userId: String) : RuleRequest() {
+data class MentionRequest(val userId: String) : AddRuleRequestData() {
     override fun value() = "@$userId"
 }
+
+data class DeleteRuleRequest(val data: List<DeleteRuleRequestData>)
+
+data class DeleteRuleRequestData(val id: String)

@@ -29,6 +29,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension
 import org.springframework.test.context.support.TestPropertySourceUtils.addInlinedPropertiesToEnvironment
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.util.stream.Stream
@@ -61,6 +62,10 @@ internal class ControllerTest {
             mockMvc.perform(get("/rules"))
                     .andExpect(status().`is`(500))
                     .andExpect(content().string(emptyString()))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
         }
 
         @ParameterizedTest
@@ -83,6 +88,14 @@ internal class ControllerTest {
             mockMvc.perform(get("/rules"))
                     .andExpect(status().`is`(500))
                     .andExpect(content().string(emptyString()))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+
+            wireMockServer.verify(getRequestedFor(urlMatching(RULES_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE")))
         }
 
         @ParameterizedTest
@@ -104,7 +117,7 @@ internal class ControllerTest {
                     .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
                     .willReturn(aResponse()
                             .withStatus(200)
-                            .withHeader("Content-Type", "text/plain")
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
                             .withBody(jsonBuilder.writeValueAsString(actualResponse))))
 
             mockMvc.perform(get("/rules"))
@@ -148,16 +161,386 @@ internal class ControllerTest {
                         "Rule response with extra fields"))
     }
 
+    @TestInstance(PER_CLASS)
+    @Nested
+    inner class AddRules {
+
+        @ParameterizedTest
+        @ValueSource(ints = [403, 404, 500])
+        fun shouldReturnInternalServerErrorWhenOauthResourceReturnsFailure(statusCode: Int) {
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(statusCode)))
+
+            mockMvc.perform(post("/rules/add")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(AddRuleRequest(listOf(AddRuleRequestData("mention", "test-account-${nextLong()}"))))))
+                    .andExpect(status().`is`(500))
+                    .andExpect(content().string(emptyString()))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = [403, 404, 500])
+        fun shouldReturnInternalServerErrorWhenAddRulesResourceReturnsFailure(statusCode: Int) {
+            val account = "test-account-${nextLong()}"
+
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(TwitterGetTokenResponse(TOKEN_TYPE, TOKEN_VALUE)))))
+
+            wireMockServer.stubFor(post(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@$account"))))))
+                    .willReturn(aResponse()
+                            .withStatus(statusCode)))
+
+            mockMvc.perform(post("/rules/add")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(AddRuleRequest(listOf(AddRuleRequestData("mention", account))))))
+                    .andExpect(status().`is`(500))
+                    .andExpect(content().string(emptyString()))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@$account")))))))
+        }
+
+        @ParameterizedTest
+        @MethodSource("successfulTestCases")
+        fun shouldReturnSuccessWithRawResponseWhenAddRulesResourceReturnsSuccess(actualRequest: AddRuleRequest,
+                                                                                 actualTwitterRequest: TwitterAddRuleRequest,
+                                                                                 actualTwitterResponse: TwitterAddRuleResponse,
+                                                                                 expectedResponse: TwitterAddRuleResponse,
+                                                                                 description: String) {
+
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(TwitterGetTokenResponse(TOKEN_TYPE, TOKEN_VALUE)))))
+
+            wireMockServer.stubFor(post(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(actualTwitterRequest)))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(actualTwitterResponse))))
+
+            mockMvc.perform(post("/rules/add")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(actualRequest)))
+                    .andExpect(status().`is`(200))
+                    .andExpect(content().string(jsonBuilder.writeValueAsString(expectedResponse)))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(actualTwitterRequest))))
+        }
+
+        private fun successfulTestCases() = Stream.of(
+                Arguments.of(
+                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
+                        "Response without tag"),
+                Arguments.of(
+                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData("@user-id-1", "id-1", "tag-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData("@user-id-1", "id-1", "tag-1"))),
+                        "Response with tag"),
+                Arguments.of(
+                        AddRuleRequest(
+                                listOf(
+                                        AddRuleRequestData("mention", "user-id-1"),
+                                        AddRuleRequestData("mention", "user-id-2"),
+                                        AddRuleRequestData("mention", "user-id-3"))),
+                        TwitterAddRuleRequest(
+                                listOf(
+                                        TwitterAddRuleRequestData("@user-id-1"),
+                                        TwitterAddRuleRequestData("@user-id-2"),
+                                        TwitterAddRuleRequestData("@user-id-3"))),
+                        TwitterAddRuleResponse(
+                                listOf(
+                                        TwitterAddRuleData("@user-id-1", "id-1", "tag-1"),
+                                        TwitterAddRuleData("@user-id-2", "id-2"),
+                                        TwitterAddRuleData("@user-id-3", "id-3", "tag-3"))),
+                        TwitterAddRuleResponse(
+                                listOf(
+                                        TwitterAddRuleData("@user-id-1", "id-1", "tag-1"),
+                                        TwitterAddRuleData("@user-id-2", "id-2"),
+                                        TwitterAddRuleData("@user-id-3", "id-3", "tag-3"))),
+                        "Multiple rule requests"),
+                Arguments.of(
+                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1", extraField = "extra-field-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
+                        "Response with extra fields"),
+                Arguments.of(
+                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1")), listOf(TwitterAddRuleError("title-1", "type-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1")), listOf(TwitterAddRuleError("title-1", "type-1"))),
+                        "Response with error"),
+                Arguments.of(
+                        AddRuleRequest(
+                                listOf(
+                                        AddRuleRequestData("mention", "user-id-1"),
+                                        AddRuleRequestData("mention", "user-id-2"),
+                                        AddRuleRequestData("mention", "user-id-3"))),
+                        TwitterAddRuleRequest(
+                                listOf(
+                                        TwitterAddRuleRequestData("@user-id-1"),
+                                        TwitterAddRuleRequestData("@user-id-2"),
+                                        TwitterAddRuleRequestData("@user-id-3"))),
+                        TwitterAddRuleResponse(
+                                listOf(
+                                        TwitterAddRuleData(value = "@user-id-1", id = "id-1"),
+                                        TwitterAddRuleData(value = "@user-id-2", id = "id-2", extraField = "extra-field-2"),
+                                        TwitterAddRuleData(value = "@user-id-3", id = "id-3")),
+                                listOf(
+                                        TwitterAddRuleError("title-1", "type-1", "extra-field-1"),
+                                        TwitterAddRuleError("title-2", "type-2"))),
+                        TwitterAddRuleResponse(
+                                listOf(
+                                        TwitterAddRuleData(value = "@user-id-1", id = "id-1"),
+                                        TwitterAddRuleData(value = "@user-id-2", id = "id-2"),
+                                        TwitterAddRuleData(value = "@user-id-3", id = "id-3")),
+                                listOf(
+                                        TwitterAddRuleError("title-1", "type-1"),
+                                        TwitterAddRuleError("title-2", "type-2"))),
+                        "Response with multiple errors, multiple rule requests and extra fields"))
+    }
+
+    @TestInstance(PER_CLASS)
+    @Nested
+    inner class DeleteRules {
+
+        @ParameterizedTest
+        @ValueSource(ints = [403, 404, 500])
+        fun shouldReturnInternalServerErrorWhenOauthResourceReturnsFailure(statusCode: Int) {
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(statusCode)))
+
+            mockMvc.perform(post("/rules/delete")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(DeleteRuleRequest(listOf(DeleteRuleRequestData("id-${nextLong()}"))))))
+                    .andExpect(status().`is`(500))
+                    .andExpect(content().string(emptyString()))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = [403, 404, 500])
+        fun shouldReturnInternalServerErrorWhenDeleteRulesResourceReturnsFailure(statusCode: Int) {
+            val id = "id-${nextLong()}"
+
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(TwitterGetTokenResponse(TOKEN_TYPE, TOKEN_VALUE)))))
+
+            wireMockServer.stubFor(post(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf(id))))))
+                    .willReturn(aResponse()
+                            .withStatus(statusCode)))
+
+            mockMvc.perform(post("/rules/delete")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(DeleteRuleRequest(listOf(DeleteRuleRequestData(id))))))
+                    .andExpect(status().`is`(500))
+                    .andExpect(content().string(emptyString()))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf(id)))))))
+        }
+
+        @ParameterizedTest
+        @MethodSource("successfulTestCases")
+        fun shouldReturnSuccessWithRawResponseWhenDeleteRulesResourceReturnsSuccess(actualRequest: DeleteRuleRequest,
+                                                                                    actualTwitterRequest: TwitterDeleteRuleRequest,
+                                                                                    actualTwitterResponse: TwitterDeleteRuleResponse,
+                                                                                    expectedResponse: TwitterDeleteRuleResponse,
+                                                                                    description: String) {
+
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(TwitterGetTokenResponse(TOKEN_TYPE, TOKEN_VALUE)))))
+
+            wireMockServer.stubFor(post(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(actualTwitterRequest)))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(actualTwitterResponse))))
+
+            mockMvc.perform(post("/rules/delete")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(actualRequest)))
+                    .andExpect(status().`is`(200))
+                    .andExpect(content().string(jsonBuilder.writeValueAsString(expectedResponse)))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(actualTwitterRequest))))
+        }
+
+        private fun successfulTestCases() = Stream.of(
+                Arguments.of(
+                        DeleteRuleRequest(listOf(DeleteRuleRequestData("rule-id-1"))),
+                        TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf("rule-id-1"))),
+                        TwitterDeleteRuleResponse(),
+                        TwitterDeleteRuleResponse(),
+                        "Response without extra fields"),
+                Arguments.of(
+                        DeleteRuleRequest(listOf(DeleteRuleRequestData("rule-id-1", "extra-field-1")), "extra-field-2"),
+                        TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf("rule-id-1"))),
+                        TwitterDeleteRuleResponse(),
+                        TwitterDeleteRuleResponse(),
+                        "Request with extra fields"),
+                Arguments.of(
+                        DeleteRuleRequest(
+                                listOf(
+                                        DeleteRuleRequestData("rule-id-1"),
+                                        DeleteRuleRequestData("rule-id-2"),
+                                        DeleteRuleRequestData("rule-id-3"))),
+                        TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf("rule-id-1", "rule-id-2", "rule-id-3"))),
+                        TwitterDeleteRuleResponse(),
+                        TwitterDeleteRuleResponse(),
+                        "Multiple requests"),
+                Arguments.of(
+                        DeleteRuleRequest(listOf(DeleteRuleRequestData("rule-id-1"))),
+                        TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf("rule-id-1"))),
+                        TwitterDeleteRuleResponse(extraField = "extra-field-1"),
+                        TwitterDeleteRuleResponse(),
+                        "Response with extra fields"),
+                Arguments.of(
+                        DeleteRuleRequest(listOf(DeleteRuleRequestData("rule-id-1"))),
+                        TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf("rule-id-1"))),
+                        TwitterDeleteRuleResponse(errors = listOf(TwitterDeleteRuleError("title-1", "type-1"))),
+                        TwitterDeleteRuleResponse(errors = listOf(TwitterDeleteRuleError("title-1", "type-1"))),
+                        "Response with error result"),
+                Arguments.of(
+                        DeleteRuleRequest(listOf(
+                                DeleteRuleRequestData("rule-id-1"),
+                                DeleteRuleRequestData("rule-id-2"),
+                                DeleteRuleRequestData("rule-id-3"))),
+                        TwitterDeleteRuleRequest(TwitterDeleteRuleRequestData(listOf("rule-id-1", "rule-id-2", "rule-id-3"))),
+                        TwitterDeleteRuleResponse(errors = listOf(
+                                TwitterDeleteRuleError("title-1", "type-1"),
+                                TwitterDeleteRuleError("title-2", "type-2"),
+                                TwitterDeleteRuleError("title-3", "type-3", "extra-field-3"))),
+                        TwitterDeleteRuleResponse(errors = listOf(
+                                TwitterDeleteRuleError("title-1", "type-1"),
+                                TwitterDeleteRuleError("title-2", "type-2"),
+                                TwitterDeleteRuleError("title-3", "type-3"))),
+                        "Response with multiple errors and extra fields"))
+    }
+
     data class TwitterGetTokenResponse(@JsonProperty("token_type") val type: String,
                                        @JsonProperty("access_token") val value: String,
                                        @JsonProperty("extra_field") val extraField: String? = null)
 
-    data class TwitterGetRuleResponse(@JsonProperty("data") val data: List<TwitterGetRuleData> = emptyList(),
+    data class TwitterGetRuleResponse(val data: List<TwitterGetRuleData> = emptyList(),
                                       @JsonProperty("extra_field") val extraField: String? = null)
 
-    data class TwitterGetRuleData(@JsonProperty("id") val id: String,
-                                  @JsonProperty("value") val value: String,
+    data class TwitterGetRuleData(val id: String,
+                                  val value: String,
                                   @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class AddRuleRequest(val data: List<AddRuleRequestData>)
+
+    data class AddRuleRequestData(@JsonProperty("@type") val type: String,
+                                  val userId: String)
+
+    data class TwitterAddRuleRequest(@JsonProperty("add") val data: List<TwitterAddRuleRequestData>)
+
+    data class TwitterAddRuleRequestData(val value: String)
+
+    data class TwitterAddRuleResponse(val data: List<TwitterAddRuleData> = emptyList(),
+                                      val errors: List<TwitterAddRuleError> = emptyList(),
+                                      @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class TwitterAddRuleData(val value: String,
+                                  val id: String,
+                                  val tag: String? = null,
+                                  @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class TwitterAddRuleError(val title: String,
+                                   val type: String,
+                                   @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class DeleteRuleRequest(val data: List<DeleteRuleRequestData>,
+                                 @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class DeleteRuleRequestData(val id: String,
+                                     @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class TwitterDeleteRuleRequest(@JsonProperty("delete") val data: TwitterDeleteRuleRequestData)
+
+    data class TwitterDeleteRuleRequestData(val ids: List<String>)
+
+    data class TwitterDeleteRuleResponse(val errors: List<TwitterDeleteRuleError> = emptyList(),
+                                         @JsonProperty("extra_field") val extraField: String? = null)
+
+    data class TwitterDeleteRuleError(val title: String,
+                                      val type: String,
+                                      @JsonProperty("extra_field") val extraField: String? = null)
 
     companion object {
         private const val BEARER_TOKEN = "test-bearer-token"
