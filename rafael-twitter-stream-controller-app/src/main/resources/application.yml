@@ -1,10 +1,11 @@
+spring:
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:8080}
+
 twitter:
   base-url: https://api.twitter.com
   rules-path: /labs/1/tweets/stream/filter/rules
   oauth-path: /oauth2/token?grant_type=client_credentials
-  bearer-token: ${BEARER_TOKEN}
-server:
-  port: ${PORT:8080}
-spring:
-  jackson:
-    default-property-inclusion: non_null
