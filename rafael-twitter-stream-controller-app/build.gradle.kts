@@ -24,6 +24,7 @@ dependencies {
         exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
     }
     testImplementation("com.github.tomakehurst:wiremock:2.27.1")
+    testImplementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.11.1")
 }
 
 tasks {

@@ -3,6 +3,7 @@ package com.rafael.twitter.stream.controller.web
 import com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.annotation.JsonTypeInfo.Id.NAME
 import com.fasterxml.jackson.annotation.JsonTypeName
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.kittinunf.fuel.core.ResponseResultOf
@@ -112,7 +113,7 @@ class Controller(@Value("\${twitter.base-url}") val baseUrl: String,
 
 data class AddRuleRequest<T : AddRuleRequestData>(val data: List<T>)
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME)
+@JsonTypeInfo(use = NAME)
 sealed class AddRuleRequestData {
     abstract fun value(): String
 }
@@ -120,6 +121,11 @@ sealed class AddRuleRequestData {
 @JsonTypeName("mention")
 data class MentionRequest(val userId: String) : AddRuleRequestData() {
     override fun value() = "@$userId"
+}
+
+@JsonTypeName("hashtag")
+data class HashtagRequest(val hashtag: String) : AddRuleRequestData() {
+    override fun value() = "#$hashtag"
 }
 
 data class DeleteRuleRequest(val data: List<DeleteRuleRequestData>)

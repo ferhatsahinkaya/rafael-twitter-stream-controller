@@ -3,6 +3,7 @@ package com.rafael.twitter.stream.controller.web
 import com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.*
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
@@ -44,7 +45,9 @@ internal class ControllerTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
-    private val jsonBuilder = json().build<ObjectMapper>().setSerializationInclusion(NON_NULL)
+    private val jsonBuilder = json()
+            .modulesToInstall(KotlinModule())
+            .build<ObjectMapper>().setSerializationInclusion(NON_NULL)
 
     @TestInstance(PER_CLASS)
     @Nested
@@ -176,7 +179,7 @@ internal class ControllerTest {
 
             mockMvc.perform(post("/rules/add")
                     .contentType(APPLICATION_JSON_VALUE)
-                    .content(jsonBuilder.writeValueAsString(AddRuleRequest(listOf(AddRuleRequestData("mention", "test-account-${nextLong()}"))))))
+                    .content(jsonBuilder.writeValueAsString(AddRuleRequest(listOf(MentionRequest(userId = "test-account-${nextLong()}"))))))
                     .andExpect(status().`is`(500))
                     .andExpect(content().string(emptyString()))
 
@@ -207,7 +210,7 @@ internal class ControllerTest {
 
             mockMvc.perform(post("/rules/add")
                     .contentType(APPLICATION_JSON_VALUE)
-                    .content(jsonBuilder.writeValueAsString(AddRuleRequest(listOf(AddRuleRequestData("mention", account))))))
+                    .content(jsonBuilder.writeValueAsString(AddRuleRequest(listOf(MentionRequest(userId = account))))))
                     .andExpect(status().`is`(500))
                     .andExpect(content().string(emptyString()))
 
@@ -220,6 +223,62 @@ internal class ControllerTest {
                     .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
                     .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@$account")))))))
         }
+
+        @ParameterizedTest
+        @MethodSource("ruleTypeTestCases")
+        fun shouldReturnSuccessWithRawResponseWhenAddRulesResourceReturnsSuccessForAllRuleTypes(actualRequest: AddRuleRequest,
+                                                                                                actualTwitterRequest: TwitterAddRuleRequest,
+                                                                                                actualTwitterResponse: TwitterAddRuleResponse,
+                                                                                                expectedResponse: TwitterAddRuleResponse,
+                                                                                                description: String) {
+
+            wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(TwitterGetTokenResponse(TOKEN_TYPE, TOKEN_VALUE)))))
+
+            wireMockServer.stubFor(post(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(actualTwitterRequest)))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", APPLICATION_JSON_VALUE)
+                            .withBody(jsonBuilder.writeValueAsString(actualTwitterResponse))))
+
+            mockMvc.perform(post("/rules/add")
+                    .contentType(APPLICATION_JSON_VALUE)
+                    .content(jsonBuilder.writeValueAsString(actualRequest)))
+                    .andExpect(status().`is`(200))
+                    .andExpect(content().string(jsonBuilder.writeValueAsString(expectedResponse)))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(OAUTH_PATH))
+                    .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("Basic $BEARER_TOKEN")))
+
+            wireMockServer.verify(postRequestedFor(urlMatching(RULES_PATH))
+                    .withHeader("Content-Type", equalTo(APPLICATION_JSON_VALUE))
+                    .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE"))
+                    .withRequestBody(equalToJson(jsonBuilder.writeValueAsString(actualTwitterRequest))))
+        }
+
+        private fun ruleTypeTestCases() = Stream.of(
+                Arguments.of(
+                        AddRuleRequest(listOf(MentionRequest(userId = "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
+                        "Mention rule"),
+
+                Arguments.of(
+                        AddRuleRequest(listOf(HashtagRequest(hashtag = "hash-tag-value-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("#hash-tag-value-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "#hash-tag-value-1", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "#hash-tag-value-1", id = "id-1"))),
+                        "Hashtag rule"))
 
         @ParameterizedTest
         @MethodSource("successfulTestCases")
@@ -264,13 +323,13 @@ internal class ControllerTest {
 
         private fun successfulTestCases() = Stream.of(
                 Arguments.of(
-                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        AddRuleRequest(listOf(MentionRequest(userId = "user-id-1"))),
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
                         "Response without tag"),
                 Arguments.of(
-                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        AddRuleRequest(listOf(MentionRequest(userId = "user-id-1"))),
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData("@user-id-1", "id-1", "tag-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData("@user-id-1", "id-1", "tag-1"))),
@@ -278,9 +337,9 @@ internal class ControllerTest {
                 Arguments.of(
                         AddRuleRequest(
                                 listOf(
-                                        AddRuleRequestData("mention", "user-id-1"),
-                                        AddRuleRequestData("mention", "user-id-2"),
-                                        AddRuleRequestData("mention", "user-id-3"))),
+                                        MentionRequest(userId = "user-id-1"),
+                                        MentionRequest(userId = "user-id-2"),
+                                        MentionRequest(userId = "user-id-3"))),
                         TwitterAddRuleRequest(
                                 listOf(
                                         TwitterAddRuleRequestData("@user-id-1"),
@@ -298,13 +357,13 @@ internal class ControllerTest {
                                         TwitterAddRuleData("@user-id-3", "id-3", "tag-3"))),
                         "Multiple rule requests"),
                 Arguments.of(
-                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        AddRuleRequest(listOf(MentionRequest(userId = "user-id-1"))),
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1", extraField = "extra-field-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1"))),
                         "Response with extra fields"),
                 Arguments.of(
-                        AddRuleRequest(listOf(AddRuleRequestData("mention", "user-id-1"))),
+                        AddRuleRequest(listOf(MentionRequest(userId = "user-id-1"))),
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("@user-id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1")), listOf(TwitterAddRuleError("title-1", "type-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "@user-id-1", id = "id-1")), listOf(TwitterAddRuleError("title-1", "type-1"))),
@@ -312,9 +371,9 @@ internal class ControllerTest {
                 Arguments.of(
                         AddRuleRequest(
                                 listOf(
-                                        AddRuleRequestData("mention", "user-id-1"),
-                                        AddRuleRequestData("mention", "user-id-2"),
-                                        AddRuleRequestData("mention", "user-id-3"))),
+                                        MentionRequest(userId = "user-id-1"),
+                                        MentionRequest(userId = "user-id-2"),
+                                        MentionRequest(userId = "user-id-3"))),
                         TwitterAddRuleRequest(
                                 listOf(
                                         TwitterAddRuleRequestData("@user-id-1"),
@@ -505,8 +564,12 @@ internal class ControllerTest {
 
     data class AddRuleRequest(val data: List<AddRuleRequestData>)
 
-    data class AddRuleRequestData(@JsonProperty("@type") val type: String,
-                                  val userId: String)
+    // TODO Move type to parent
+    interface AddRuleRequestData
+
+    data class MentionRequest(@JsonProperty("@type") val type: String = "mention", val userId: String) : AddRuleRequestData
+
+    data class HashtagRequest(@JsonProperty("@type") val type: String = "hashtag", val hashtag: String) : AddRuleRequestData
 
     data class TwitterAddRuleRequest(@JsonProperty("add") val data: List<TwitterAddRuleRequestData>)
 
