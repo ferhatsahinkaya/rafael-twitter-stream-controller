@@ -116,21 +116,36 @@ data class AddRuleRequest<T : AddRuleRequestData>(val data: List<T>)
 @JsonTypeInfo(use = NAME)
 sealed class AddRuleRequestData {
     abstract fun value(): String
-}
 
-@JsonTypeName("mention")
-data class MentionRequest(val userId: String) : AddRuleRequestData() {
-    override fun value() = "@$userId"
-}
+    @JsonTypeName("mention")
+    data class MentionRequest(val userId: String) : AddRuleRequestData() {
+        override fun value() = "@$userId"
+    }
 
-@JsonTypeName("hashtag")
-data class HashtagRequest(val hashtag: String) : AddRuleRequestData() {
-    override fun value() = "#$hashtag"
-}
+    @JsonTypeName("hashtag")
+    data class HashtagRequest(val hashtag: String) : AddRuleRequestData() {
+        override fun value() = "#$hashtag"
+    }
 
-@JsonTypeName("exact-match")
-data class ExactMatchRequest(val value: String) : AddRuleRequestData() {
-    override fun value() = value
+    @JsonTypeName("exact-match")
+    data class ExactMatchRequest(val value: String) : AddRuleRequestData() {
+        override fun value() = value
+    }
+
+    @JsonTypeName("from")
+    data class FromRequest(val userId: String) : AddRuleRequestData() {
+        override fun value() = "from: \"$userId\""
+    }
+
+    @JsonTypeName("to")
+    data class ToRequest(val userId: String) : AddRuleRequestData() {
+        override fun value() = "to: \"$userId\""
+    }
+
+    @JsonTypeName("entity")
+    data class EntityRequest(val entity: String) : AddRuleRequestData() {
+        override fun value() = "entity: \"$entity\""
+    }
 }
 
 data class DeleteRuleRequest(val data: List<DeleteRuleRequestData>)

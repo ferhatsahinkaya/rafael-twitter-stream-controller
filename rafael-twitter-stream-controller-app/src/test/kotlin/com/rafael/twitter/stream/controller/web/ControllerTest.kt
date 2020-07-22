@@ -226,11 +226,11 @@ internal class ControllerTest {
 
         @ParameterizedTest
         @MethodSource("ruleTypeTestCases")
-        fun shouldReturnSuccessWithRawResponseWhenAddRulesResourceReturnsSuccessForAllRuleTypes(actualRequest: AddRuleRequest,
-                                                                                                actualTwitterRequest: TwitterAddRuleRequest,
-                                                                                                actualTwitterResponse: TwitterAddRuleResponse,
-                                                                                                expectedResponse: TwitterAddRuleResponse,
-                                                                                                description: String) {
+        fun shouldReturnSuccessWithRawResponseWhenAddRulesResourceReturnsSuccessForRuleType(actualRequest: AddRuleRequest,
+                                                                                            actualTwitterRequest: TwitterAddRuleRequest,
+                                                                                            actualTwitterResponse: TwitterAddRuleResponse,
+                                                                                            expectedResponse: TwitterAddRuleResponse,
+                                                                                            description: String) {
 
             wireMockServer.stubFor(post(urlMatching(OAUTH_PATH))
                     .withHeader("Accept", equalTo(APPLICATION_JSON_VALUE))
@@ -285,7 +285,28 @@ internal class ControllerTest {
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("word-1 word-2 word-3"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "word-1 word-2 word-3", id = "id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "word-1 word-2 word-3", id = "id-1"))),
-                        "Exact match rule"))
+                        "Exact match rule"),
+
+                Arguments.of(
+                        AddRuleRequest(listOf(FromRequest(userId = "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("from: \"user-id-1\""))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "from: \"user-id-1\"", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "from: \"user-id-1\"", id = "id-1"))),
+                        "From rule"),
+
+                Arguments.of(
+                        AddRuleRequest(listOf(ToRequest(userId = "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("to: \"user-id-1\""))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "to: \"user-id-1\"", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "to: \"user-id-1\"", id = "id-1"))),
+                        "To rule"),
+
+                Arguments.of(
+                        AddRuleRequest(listOf(EntityRequest(entity = "entity-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("entity: \"entity-1\""))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "entity: \"entity-1\"", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "entity: \"entity-1\"", id = "id-1"))),
+                        "Entity rule"))
 
         @ParameterizedTest
         @MethodSource("successfulTestCases")
@@ -578,6 +599,12 @@ internal class ControllerTest {
     data class HashtagRequest(val hashtag: String) : AddRuleRequestData("hashtag")
 
     data class ExactMatchRequest(val value: String) : AddRuleRequestData("exact-match")
+
+    data class FromRequest(val userId: String) : AddRuleRequestData("from")
+
+    data class ToRequest(val userId: String) : AddRuleRequestData("to")
+
+    data class EntityRequest(val entity: String) : AddRuleRequestData("entity")
 
     data class TwitterAddRuleRequest(@JsonProperty("add") val data: List<TwitterAddRuleRequestData>)
 
