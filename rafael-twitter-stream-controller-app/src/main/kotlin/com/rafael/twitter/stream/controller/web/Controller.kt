@@ -128,6 +128,11 @@ data class HashtagRequest(val hashtag: String) : AddRuleRequestData() {
     override fun value() = "#$hashtag"
 }
 
+@JsonTypeName("exact-match")
+data class ExactMatchRequest(val value: String) : AddRuleRequestData() {
+    override fun value() = value
+}
+
 data class DeleteRuleRequest(val data: List<DeleteRuleRequestData>)
 
 data class DeleteRuleRequestData(val id: String)

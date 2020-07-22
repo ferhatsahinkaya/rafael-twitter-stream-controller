@@ -278,7 +278,14 @@ internal class ControllerTest {
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("#hash-tag-value-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "#hash-tag-value-1", id = "id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "#hash-tag-value-1", id = "id-1"))),
-                        "Hashtag rule"))
+                        "Hashtag rule"),
+
+                Arguments.of(
+                        AddRuleRequest(listOf(ExactMatchRequest(value = "word-1 word-2 word-3"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("word-1 word-2 word-3"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "word-1 word-2 word-3", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "word-1 word-2 word-3", id = "id-1"))),
+                        "Exact match rule"))
 
         @ParameterizedTest
         @MethodSource("successfulTestCases")
@@ -564,12 +571,13 @@ internal class ControllerTest {
 
     data class AddRuleRequest(val data: List<AddRuleRequestData>)
 
-    // TODO Move type to parent
-    interface AddRuleRequestData
+    abstract class AddRuleRequestData(@get:JsonProperty("@type") val type: String)
 
-    data class MentionRequest(@JsonProperty("@type") val type: String = "mention", val userId: String) : AddRuleRequestData
+    data class MentionRequest(val userId: String) : AddRuleRequestData("mention")
 
-    data class HashtagRequest(@JsonProperty("@type") val type: String = "hashtag", val hashtag: String) : AddRuleRequestData
+    data class HashtagRequest(val hashtag: String) : AddRuleRequestData("hashtag")
+
+    data class ExactMatchRequest(val value: String) : AddRuleRequestData("exact-match")
 
     data class TwitterAddRuleRequest(@JsonProperty("add") val data: List<TwitterAddRuleRequestData>)
 
