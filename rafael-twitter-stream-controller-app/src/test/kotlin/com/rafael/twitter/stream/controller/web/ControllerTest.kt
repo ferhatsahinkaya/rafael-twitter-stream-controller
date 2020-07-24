@@ -306,7 +306,14 @@ internal class ControllerTest {
                         TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("entity: \"entity-1\""))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "entity: \"entity-1\"", id = "id-1"))),
                         TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "entity: \"entity-1\"", id = "id-1"))),
-                        "Entity rule"))
+                        "Entity rule"),
+
+                Arguments.of(
+                        AddRuleRequest(listOf(RetweetsOfRequest(userId = "user-id-1"))),
+                        TwitterAddRuleRequest(listOf(TwitterAddRuleRequestData("retweets_of: \"user-id-1\""))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "retweets_of \"user-id-1\"", id = "id-1"))),
+                        TwitterAddRuleResponse(listOf(TwitterAddRuleData(value = "retweets_of \"user-id-1\"", id = "id-1"))),
+                        "RetweetsOf rule"))
 
         @ParameterizedTest
         @MethodSource("successfulTestCases")
@@ -605,6 +612,8 @@ internal class ControllerTest {
     data class ToRequest(val userId: String) : AddRuleRequestData("to")
 
     data class EntityRequest(val entity: String) : AddRuleRequestData("entity")
+
+    data class RetweetsOfRequest(val userId: String) : AddRuleRequestData("retweets-of")
 
     data class TwitterAddRuleRequest(@JsonProperty("add") val data: List<TwitterAddRuleRequestData>)
 

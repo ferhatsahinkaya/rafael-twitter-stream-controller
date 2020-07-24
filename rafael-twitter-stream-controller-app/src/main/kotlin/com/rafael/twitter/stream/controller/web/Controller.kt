@@ -146,6 +146,11 @@ sealed class AddRuleRequestData {
     data class EntityRequest(val entity: String) : AddRuleRequestData() {
         override fun value() = "entity: \"$entity\""
     }
+
+    @JsonTypeName("retweets-of")
+    data class RetweetsOfRequest(val userId: String) : AddRuleRequestData() {
+        override fun value() = "retweets_of: \"$userId\""
+    }
 }
 
 data class DeleteRuleRequest(val data: List<DeleteRuleRequestData>)
