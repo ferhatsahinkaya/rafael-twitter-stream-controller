@@ -9,8 +9,8 @@ import com.github.tomakehurst.wiremock.client.WireMock.*
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import com.rafael.twitter.stream.controller.application.Application
 import com.rafael.twitter.stream.controller.web.ControllerTest.Companion.PropertyOverrideContextInitializer
+import com.rafael.twitter.stream.controller.web.ControllerTest.Companion.WireMockServerConfiguration
 import org.hamcrest.Matchers.emptyString
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS
@@ -26,6 +26,10 @@ import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder.json
 import org.springframework.test.context.ContextConfiguration
+import org.springframework.test.context.TestContext
+import org.springframework.test.context.TestExecutionListener
+import org.springframework.test.context.TestExecutionListeners
+import org.springframework.test.context.TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS
 import org.springframework.test.context.junit.jupiter.SpringExtension
 import org.springframework.test.context.support.TestPropertySourceUtils.addInlinedPropertiesToEnvironment
 import org.springframework.test.web.servlet.MockMvc
@@ -36,11 +40,15 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.util.stream.Stream
 import kotlin.random.Random.Default.nextLong
 
+
 @ExtendWith(SpringExtension::class)
 @WebMvcTest(controllers = [Controller::class])
 @ContextConfiguration(
         initializers = [PropertyOverrideContextInitializer::class],
         classes = [Application::class])
+@TestExecutionListeners(
+        value = [WireMockServerConfiguration::class],
+        mergeMode = MERGE_WITH_DEFAULTS)
 internal class ControllerTest {
 
     @Autowired
@@ -655,13 +663,17 @@ internal class ControllerTest {
         private const val OAUTH_PATH = "/test-oauth-path"
         private val TOKEN_TYPE = "token-type-${nextLong()}"
         private val TOKEN_VALUE = "token-value-${nextLong()}"
-        private val wireMockServer = WireMockServer(wireMockConfig().dynamicPort()).apply { start() }
+        private val wireMockServer = WireMockServer(wireMockConfig().dynamicPort())
 
-        // TODO Use wiremock server properly
+        class WireMockServerConfiguration : TestExecutionListener {
 
-        @AfterAll
-        fun tearDown() {
-            wireMockServer.stop()
+            override fun beforeTestClass(testContext: TestContext) {
+                wireMockServer.start()
+            }
+
+            override fun afterTestClass(testContext: TestContext) {
+                wireMockServer.stop()
+            }
         }
 
         class PropertyOverrideContextInitializer : ApplicationContextInitializer<ConfigurableApplicationContext> {
