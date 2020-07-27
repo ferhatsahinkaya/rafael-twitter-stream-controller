@@ -110,7 +110,7 @@ internal class ControllerTest {
         }
 
         @ParameterizedTest
-        @MethodSource("successfulResponses")
+        @MethodSource("successfulTestCases")
         fun shouldReturnSuccessWithRawResponseWhenGetRulesResourceReturnsSuccess(actualResponse: TwitterGetRuleResponse,
                                                                                  expectedResponse: TwitterGetRuleResponse,
                                                                                  description: String) {
@@ -145,7 +145,7 @@ internal class ControllerTest {
                     .withHeader("Authorization", equalTo("$TOKEN_TYPE $TOKEN_VALUE")))
         }
 
-        private fun successfulResponses() = Stream.of(
+        private fun successfulTestCases() = Stream.of(
                 Arguments.of(
                         TwitterGetRuleResponse(emptyList()),
                         TwitterGetRuleResponse(emptyList()),
